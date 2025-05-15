@@ -56,4 +56,8 @@ sudo systemctl reload nginx
 
 ```
 
+## 体验网站
+
+http://101.200.43.46/
+
 > 仅供学习使用。
