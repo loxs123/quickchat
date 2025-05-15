@@ -1,0 +1,135 @@
+/* body {
+    font-family: Arial, sans-serif;
+    margin: 0;
+    padding: 0;
+} */
+
+html, body {
+    height: 100%;
+    margin: 0;
+    overflow: hidden; /* 防止页面本身滚动 */
+    font-family: Arial, sans-serif;
+}
+
+.toolbar {
+    background-color: #333;
+    padding: 10px;
+    text-align: center;
+}
+
+.toolbar button {
+    background-color: #555;
+    color: white;
+    border: none;
+    padding: 10px 20px;
+    margin: 0 10px;
+    cursor: pointer;
+}
+
+.toolbar button:hover {
+    background-color: #777;
+}
+
+.container {
+    display: flex;
+    height: calc(100vh - 50px);
+    border: 1px solid #ccc;
+}
+#inputText {
+    flex: var(--left-ratio, 1);
+    min-width: 100px;
+    resize: none;
+    border: 1px solid #ccc;
+    padding: 10px;
+    font-size: 16px;
+}
+
+.resizer {
+    width: 5px;
+    background-color: #eee;
+    cursor: col-resize;
+    border-left: 1px solid #ccc;
+    border-right: 1px solid #ccc;
+    position: relative;
+    z-index: 10;
+}
+
+#outputMarkdown {
+    flex: var(--right-ratio, 1);
+    min-width: 100px;
+    border: 1px solid #ccc;
+    border-left: none;
+    padding: 10px;
+    overflow: auto;
+}
+
+.markdown-box {
+    display: flex;
+    flex-direction: column;
+}
+
+textarea {
+    width: 50%;
+    padding: 20px;
+    font-size: 16px;
+    border: none;
+    resize: none;
+    outline: none;
+    padding-top: 30px;
+}
+
+.markdown-box {
+    width: 50%;
+    padding: 20px;
+    overflow-y: auto;
+    background-color: #f9f9f9;
+    line-height: 1.6;
+}
+
+.markdown-box pre {
+    background-color: #f0f0f0;
+    padding: 10px;
+    overflow-x: auto;
+    border-radius: 5px;
+}
+
+#toc {
+    margin-bottom: 20px;
+    padding: 10px;
+    background-color: #eee;
+    border: 1px solid #ccc;
+    border-radius: 8px;
+    display: none; /* 默认隐藏，JS 控制显示 */
+}
+
+
+#toc a {
+    color: #0066cc;
+    text-decoration: none;
+    display: block;
+    margin: 5px 0;
+}
+
+#toc a:hover {
+    text-decoration: underline;
+}
+
+
+#copySection {
+    margin-top: 20px;
+    text-align: right;
+}
+
+#copyBtn {
+    background-color: #4CAF50;
+    color: white;
+    border: none;
+    padding: 6px 12px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 14px;
+}
+
+#copyBtn:hover {
+    background-color: #45a049;
+}

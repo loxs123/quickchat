@@ -1,0 +1,307 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+    <meta charset="UTF-8">
+    <title>大模型工具</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+
+    <!-- Highlight.js 代码高亮 -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github.min.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+
+    <!-- marked.js 用于解析 Markdown -->
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+
+    <!-- MathJax 数学公式 -->
+    <script>
+        window.MathJax = {
+            tex: { inlineMath: [['$', '$'], ['\\(', '\\)']] },
+            svg: { fontCache: 'global' }
+        };
+    </script>
+    <script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+</head>
+<body>
+    <div class="toolbar">
+        <button onclick="streamText('translate')">翻译</button>
+        <button onclick="streamText('polish')">润色</button>
+        <button onclick="streamText('solve')">解题</button>
+        <button onclick="streamText('默认')">其他</button>
+    </div>
+    <!-- <div class="container">
+        <textarea id="inputText" placeholder="请输入文本..."></textarea>
+        <div id="outputMarkdown" class="markdown-box">
+            <div id="toc"></div>
+            <div id="content"></div>
+            <div id="copySection" style="display: none;">
+                <button id="copyBtn" title="复制 Markdown">📋 复制</button>
+                <span id="copyStatus" style="margin-left: 10px; color: green;"></span>
+            </div>
+        </div>
+    </div> -->
+    <div class="container">
+        <textarea id="inputText" placeholder="请输入文本..."></textarea>
+        <div class="resizer"></div> <!-- 拖动分隔线 -->
+        <div id="outputMarkdown" class="markdown-box">
+            <div id="toc"></div>
+            <div id="content"></div>
+            <div id="copySection" style="display: none;">
+                <button id="copyBtn" title="复制 Markdown">📋 复制</button>
+                <span id="copyStatus" style="margin-left: 10px; color: green;"></span>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // 自动生成 TOC
+        function generateTOC(container) {
+            const toc = document.getElementById("toc");
+            toc.innerHTML = ""; // 清空旧目录
+
+            const headers = container.querySelectorAll("h1, h2, h3");
+
+            if (headers.length === 0) {
+                toc.style.display = "none";  // 没有标题则隐藏
+                return;
+            }
+
+            toc.style.display = "block";  // 有标题则显示
+            toc.innerHTML = "<h3>目录</h3>";
+            headers.forEach((header, index) => {
+                const id = "heading-" + index;
+                header.id = id;
+                const link = document.createElement("a");
+                link.href = "#" + id;
+                link.innerText = header.innerText;
+                link.style.display = "block";
+                link.style.marginLeft = (parseInt(header.tagName[1]) - 1) * 10 + "px";
+                toc.appendChild(link);
+            });
+        }
+
+        let latestRawMarkdown = "";
+
+        function submitText(mode) {
+            const inputText = document.getElementById("inputText").value;
+            fetch("/process", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ text: inputText, mode: mode })
+            })
+            .then(response => response.json())
+            .then(data => {
+                latestRawMarkdown = data.result;  // 保存原始 Markdown 文本
+                const contentDiv = document.getElementById("content");
+                contentDiv.innerHTML = marked.parse(data.result);
+                generateTOC(contentDiv);
+                hljs.highlightAll(); // 高亮代码
+                MathJax.typeset();   // 渲染公式
+                
+                const copySection = document.getElementById("copySection");
+                // 显示或隐藏复制按钮
+                if (latestRawMarkdown.trim() !== "") {
+                    copySection.style.display = "block";
+                } else {
+                    copySection.style.display = "none";
+                }
+            });
+        }
+
+        // 流式函数
+        function streamText(mode) {
+            const inputText = document.getElementById("inputText").value;
+            const contentDiv = document.getElementById("content");
+            const tocDiv = document.getElementById("toc");
+            const copySection = document.getElementById("copySection");
+
+            // 重置
+            contentDiv.innerHTML = "";
+            tocDiv.innerHTML = "";
+            tocDiv.style.display = "none";
+            copySection.style.display = "none";
+            latestRawMarkdown = "";
+
+            fetch("/stream_process", {
+                method: "POST",
+                headers: {"Content-Type": "application/json"},
+                body: JSON.stringify({text: inputText, mode})
+            }).then(response => {
+                const reader = response.body.getReader();
+                const decoder = new TextDecoder("utf-8");
+
+                function readChunk() {
+                    reader.read().then(({done, value}) => {
+                        if (done) {
+                            // 流结束后，确保最后一次渲染并触发高亮和公式、TOC、复制按钮
+                            renderAll();
+                            return;
+                        }
+                        // 解码并拆分 SSE 块
+                        const chunk = decoder.decode(value, {stream: true});
+                        chunk.split("-$#$#$#$-")
+                            .filter(line => line.startsWith("data: "))
+                            .forEach(line => {
+                                const data = line.replace(/^data: /, "");
+                                if (!data.startsWith("[ERROR]")) {
+                                    latestRawMarkdown += data;
+                                    // 每收到一段就渲染一次
+                                    renderPartial();
+                                }
+                            });
+                        // 继续读
+                        readChunk();
+                    });
+                }
+                readChunk();
+            });
+        }
+
+        // 局部渲染：更新 Markdown，供流式增量可见
+        function renderPartial() {
+            const contentDiv = document.getElementById("content");
+            contentDiv.innerHTML = marked.parse(latestRawMarkdown);
+        }
+
+        // 结束渲染：高亮、公式、TOC、复制按钮
+        function renderAll() {
+            const contentDiv = document.getElementById("content");
+            const tocDiv = document.getElementById("toc");
+            const copySection = document.getElementById("copySection");
+
+            // 最终完整渲染
+            contentDiv.innerHTML = marked.parse(latestRawMarkdown);
+
+            // 代码高亮
+            hljs.highlightAll();
+
+            // MathJax 渲染公式
+            MathJax.typeset();
+
+            // 生成目录（如果有标题）
+            generateTOC(contentDiv);
+
+            // 显示复制按钮
+            if (latestRawMarkdown.trim()) {
+                copySection.style.display = "block";
+            }
+        }
+
+        function fallbackCopy(text) {
+            const textarea = document.createElement("textarea");
+            textarea.value = text;
+            textarea.setAttribute("readonly", "");
+            textarea.style.position = "absolute";
+            textarea.style.left = "-9999px";
+            document.body.appendChild(textarea);
+            textarea.select();
+            document.execCommand("copy");
+            document.body.removeChild(textarea);
+        }
+
+        // 复制 Markdown 内容
+        document.addEventListener("DOMContentLoaded", () => {
+            const copyBtn = document.getElementById("copyBtn");
+            const copyStatus = document.getElementById("copyStatus");
+
+            copyBtn.addEventListener("click", () => {
+                if (navigator.clipboard && location.protocol === "https:") {
+                    navigator.clipboard.writeText(latestRawMarkdown).then(() => {
+                        copyStatus.textContent = "已复制！";
+                    }).catch(() => {
+                        try {
+                            fallbackCopy(latestRawMarkdown);
+                            copyStatus.textContent = "已复制！";
+                            setTimeout(() => (copyStatus.textContent = ""), 2000);
+                        } catch (err) {
+                            copyStatus.textContent = "复制失败";
+                        }
+                    });
+                } else {
+                    try {
+                        fallbackCopy(latestRawMarkdown);
+                        copyStatus.textContent = "已复制！";
+                        setTimeout(() => (copyStatus.textContent = ""), 2000);
+                    } catch (err) {
+                        copyStatus.textContent = "复制失败";
+                    }
+                }
+
+            });
+        });
+    </script>
+
+    <script>
+        // 获取元素
+        const resizer = document.querySelector('.resizer');
+        const leftPanel = document.getElementById('inputText');
+        const rightPanel = document.getElementById('outputMarkdown');
+        const container = document.querySelector('.container');
+
+        // 初始比例
+        let leftRatio = 0.5;
+        let rightRatio = 0.5;
+
+        // 更新CSS变量
+        function updateRatios() {
+            container.style.setProperty('--left-ratio', leftRatio);
+            container.style.setProperty('--right-ratio', rightRatio);
+        }
+
+        // 初始化
+        updateRatios();
+
+        // 使用mousedown/mousemove/mouseup事件
+        resizer.addEventListener('mousedown', startResize);
+
+        function startResize(e) {
+            e.preventDefault();
+            
+            // 添加临时样式
+            resizer.style.backgroundColor = '#ccc';
+            document.body.style.cursor = 'col-resize';
+            
+            // 记录初始位置
+            const startX = e.clientX;
+            const containerWidth = container.offsetWidth;
+            const startLeftWidth = leftPanel.offsetWidth;
+            
+            // 鼠标移动事件
+            const moveHandler = function(e) {
+                e.preventDefault();
+                
+                // 计算新的宽度
+                const dx = e.clientX - startX;
+                const newLeftWidth = Math.max(100, Math.min(containerWidth - 100, startLeftWidth + dx));
+                
+                // 计算新的比例
+                leftRatio = newLeftWidth / containerWidth;
+                rightRatio = 1 - leftRatio;
+                
+                // 更新显示
+                updateRatios();
+            };
+            
+            // 鼠标释放事件
+            const upHandler = function() {
+                // 移除临时样式
+                resizer.style.backgroundColor = '';
+                document.body.style.cursor = '';
+                
+                // 移除事件监听器
+                document.removeEventListener('mousemove', moveHandler);
+                document.removeEventListener('mouseup', upHandler);
+            };
+            
+            // 添加事件监听器
+            document.addEventListener('mousemove', moveHandler);
+            document.addEventListener('mouseup', upHandler);
+        }
+
+        // 窗口大小变化时重新计算比例
+        window.addEventListener('resize', () => {
+            // 保持当前比例不变
+            updateRatios();
+        });
+    </script>   
+</body>
+</html>
