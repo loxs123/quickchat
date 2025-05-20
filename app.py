@@ -70,7 +70,7 @@ async def shutdown():
                 print(f"Error logging out crawler: {e}")
     print('[DONE]')
 
-@app.route("/index_page")
+@app.route("/loxs")
 async def index():
     resp = await make_response(await render_template('index.html'))
     if not request.cookies.get('session_id'):
