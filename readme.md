@@ -52,14 +52,16 @@
         fnm install 16
         fnm use 16
         ```
-
-4. 设置 API Key：
+4. 设置COOKIES
+    - 到各个网站上面找cookie
+    - 写到`quickchat\crawler\config\base_config.py`中
+5. 设置 API Key：
     ```bash
     export SILICONFLOW_API_KEY=YOURKEY
     ```
     - API Key 获取地址：https://siliconflow.cn/
 
-5. 启动应用：
+6. 启动应用：
     ```bash
     nohup python app.py &
     ```
@@ -80,14 +82,19 @@
 
 3. 安装 Node.js 16：
     - 从 Node.js 官网下载并安装 Node.js 16 版本：https://nodejs.org/en/download/
+  
+4. 设置COOKIES
+    - 到各个网站上面找cookie
+    - 写到`quickchat\crawler\config\base_config.py`中
+    - 知乎：`quickchat\crawler\media_platform\zhihu\core.py`中`__init__`函数`LOGIN_TYPE`为`qrcode`,`HEADLESS`为`False`
 
-4. 设置 API Key：
+5. 设置 API Key：
     ```bash
     set SILICONFLOW_API_KEY=YOURKEY
     ```
     - API Key 获取地址：https://siliconflow.cn/
 
-5. 启动应用：
+6. 启动应用：
     ```bash
     python app.py
     ```
