@@ -98,7 +98,7 @@ async def stream_process():
         cfgs = {cfg.split('=')[0] : cfg.split('=')[1] for cfg in cfgs}
         keywords = re.sub(r'\[.*?\]', '', input_text)
         cfgs['KEYWORDS'] = keywords
-        platforms_sort = ['tieba', 'wb', 'bili', 'xhs', 'zhihu', 'dy']
+        platforms_sort = ['贴吧', '微博', '哔哩哔哩', '小红书', '知乎', '抖音']
         if 'P' in cfgs:
             platforms = cfgs['P'].split(',')
             platforms = [en2zh[p.strip()] for p in platforms if p.strip() in en2zh]
@@ -147,14 +147,14 @@ async def upload():
     return jsonify({"uploaded": saved_files})
 
 
-# if __name__ == "__main__":
-#     import asyncio
-#     app.run(host='127.0.0.1', port=5001, debug=True)
-
 if __name__ == "__main__":
-    import hypercorn.asyncio
-    from hypercorn.config import Config
-    config = Config()
-    config.bind = ["0.0.0.0:80"]
-    config.startup_timeout = 500  # 延长 lifespan startup 阶段的等待时间
-    asyncio.run(hypercorn.asyncio.serve(app, config))
+    import asyncio
+    app.run(host='127.0.0.1', port=5001, debug=True)
+
+# if __name__ == "__main__":
+#     import hypercorn.asyncio
+#     from hypercorn.config import Config
+#     config = Config()
+#     config.bind = ["0.0.0.0:80"]
+#     config.startup_timeout = 500  # 延长 lifespan startup 阶段的等待时间
+#     asyncio.run(hypercorn.asyncio.serve(app, config))

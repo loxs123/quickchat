@@ -18,7 +18,8 @@ from .time_util import *
 
 
 def init_loging_config():
-    level = logging.INFO
+    level = logging.ERROR
+    # level = logging.INFO
     logging.basicConfig(
         level=level,
         format="%(asctime)s %(name)s %(levelname)s (%(filename)s:%(lineno)d) - %(message)s",
