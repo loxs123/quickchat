@@ -112,8 +112,9 @@ async def stream_process():
             for p in platforms:
                 cnt = 0
                 crawler = crawler_cache[p]
+                yield f"data: ## {p}\n-$#$-"
                 async for note in crawler.search(**cfgs):
-                    yield f"data: ## {p}\n{note}\n\n-$#$-"
+                    yield f"data: {note}\n\n-$#$-"
                     cnt += 1
                 if cnt == 0:
                     abnormals.append(p)
@@ -147,14 +148,14 @@ async def upload():
     return jsonify({"uploaded": saved_files})
 
 
-if __name__ == "__main__":
-    import asyncio
-    app.run(host='127.0.0.1', port=5001, debug=True)
-
 # if __name__ == "__main__":
-#     import hypercorn.asyncio
-#     from hypercorn.config import Config
-#     config = Config()
-#     config.bind = ["0.0.0.0:80"]
-#     config.startup_timeout = 500  # 延长 lifespan startup 阶段的等待时间
-#     asyncio.run(hypercorn.asyncio.serve(app, config))
+#     import asyncio
+#     app.run(host='127.0.0.1', port=5001, debug=True)
+
+if __name__ == "__main__":
+    import hypercorn.asyncio
+    from hypercorn.config import Config
+    config = Config()
+    config.bind = ["0.0.0.0:80"]
+    config.startup_timeout = 500  # 延长 lifespan startup 阶段的等待时间
+    asyncio.run(hypercorn.asyncio.serve(app, config))
