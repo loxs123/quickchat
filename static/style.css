@@ -35,14 +35,14 @@ html, body {
     height: calc(100vh - 50px);
     border: 1px solid #ccc;
 }
-#inputText {
+/* #inputText {
     flex: var(--left-ratio, 1);
     min-width: 100px;
     resize: none;
     border: 1px solid #ccc;
     padding: 10px;
     font-size: 16px;
-}
+} */
 
 .resizer {
     width: 5px;
@@ -63,10 +63,9 @@ html, body {
     overflow: auto;
 }
 
-.markdown-box {
-    display: flex;
-    flex-direction: column;
-}
+/* .markdown-box {
+
+} */
 
 textarea {
     width: 50%;
@@ -79,8 +78,12 @@ textarea {
 }
 
 .markdown-box {
+    display: flex;
+    flex-direction: column;
     width: 50%;
     padding: 20px;
+    padding-bottom: 40px;
+    margin-bottom: 20px;
     overflow-y: auto;
     background-color: #f9f9f9;
     line-height: 1.6;
@@ -132,4 +135,52 @@ textarea {
 
 #copyBtn:hover {
     background-color: #45a049;
+}
+
+#leftPanel {
+    flex: var(--left-ratio, 1);
+    display: flex;
+    flex-direction: column;
+    border: 1px solid #ccc;
+    min-width: 100px;
+}
+
+#inputText {
+    flex-grow: 1;
+    resize: none;
+    border: none;
+    padding: 10px;
+    font-size: 16px;
+    outline: none;
+    width: 100%;
+    box-sizing: border-box;
+}
+
+.upload-section {
+    padding: 10px;
+    border-top: 1px solid #ccc;
+    background-color: #f0f0f0;
+    padding-bottom: 20px;
+}
+
+.upload-section input[type="file"] {
+    margin-right: 10px;
+}
+
+#uploadStatus {
+    font-size: 14px;
+}
+
+.custom-upload-button {
+    display: inline-block;
+    background-color: #d3d3d3;
+    color: rgb(37, 37, 37);
+    padding: 3px 10px;
+    cursor: pointer;
+    border-radius: 4px;
+    font-size: 14px;
+}
+
+.custom-upload-button:hover {
+    background-color: #9c9c9c;
 }

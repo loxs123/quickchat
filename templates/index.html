@@ -23,24 +23,25 @@
 </head>
 <body>
     <div class="toolbar">
+        <button onclick="toMarkdown()">转MD</button>
         <button onclick="streamText('translate')">翻译</button>
         <button onclick="streamText('polish')">润色</button>
         <button onclick="streamText('solve')">解题</button>
+        <button onclick="streamText('translateFile')">翻译(文件)</button>
+        <button onclick="streamText('search')">查阅</button>
         <button onclick="streamText('默认')">其他</button>
     </div>
-    <!-- <div class="container">
-        <textarea id="inputText" placeholder="请输入文本..."></textarea>
-        <div id="outputMarkdown" class="markdown-box">
-            <div id="toc"></div>
-            <div id="content"></div>
-            <div id="copySection" style="display: none;">
-                <button id="copyBtn" title="复制 Markdown">📋 复制</button>
-                <span id="copyStatus" style="margin-left: 10px; color: green;"></span>
+    <div class="container">
+
+        <div id="leftPanel">
+            <textarea id="inputText" placeholder="请输入文本..."></textarea>
+            <div class="upload-section">
+                <input type="file" id="fileInput" multiple style="display: none;">
+                <label for="fileInput" class="custom-upload-button">选择文件</label>
+                <span id="uploadStatus"></span>
             </div>
         </div>
-    </div> -->
-    <div class="container">
-        <textarea id="inputText" placeholder="请输入文本..."></textarea>
+        
         <div class="resizer"></div> <!-- 拖动分隔线 -->
         <div id="outputMarkdown" class="markdown-box">
             <div id="toc"></div>
@@ -107,6 +108,22 @@
             });
         }
 
+        function toMarkdown() {
+            latestRawMarkdown = document.getElementById("inputText").value;
+            const contentDiv = document.getElementById("content");
+            contentDiv.innerHTML = marked.parse(latestRawMarkdown);
+            generateTOC(contentDiv);
+            hljs.highlightAll(); // 高亮代码
+            MathJax.typeset();   // 渲染公式
+            const copySection = document.getElementById("copySection");
+            // 显示或隐藏复制按钮
+            if (latestRawMarkdown.trim() !== "") {
+                copySection.style.display = "block";
+            } else {
+                copySection.style.display = "none";
+            }
+        }
+
         // 流式函数
         function streamText(mode) {
             const inputText = document.getElementById("inputText").value;
@@ -138,7 +155,7 @@
                         }
                         // 解码并拆分 SSE 块
                         const chunk = decoder.decode(value, {stream: true});
-                        chunk.split("-$#$#$#$-")
+                        chunk.split("-$#$-")
                             .filter(line => line.startsWith("data: "))
                             .forEach(line => {
                                 const data = line.replace(/^data: /, "");
@@ -302,6 +319,40 @@
             // 保持当前比例不变
             updateRatios();
         });
-    </script>   
+    </script>
+    <script>
+        function uploadFiles() {
+            const input = document.getElementById("fileInput");
+            const files = input.files;
+            if (files.length === 0) return;
+
+            const formData = new FormData();
+            for (let i = 0; i < files.length; i++) {
+                formData.append("files", files[i]);
+            }
+
+            fetch("/upload", {
+                method: "POST",
+                body: formData
+            }).then(response => response.json())
+            .then(data => {
+                const statusDiv = document.getElementById("uploadStatus");
+                statusDiv.innerHTML = ""; // 清空旧状态
+                data.uploaded.forEach(filename => {
+                    statusDiv.innerHTML = `${filename} 上传成功`;
+                });
+            })
+            .catch(err => {
+                document.getElementById("uploadStatus").textContent = "上传失败";
+            });
+        }
+        document.getElementById("fileInput").addEventListener("change", function() {
+            if (this.files.length > 0) {
+                uploadFiles();
+            }
+        });
+    </script>
+
+
 </body>
 </html>

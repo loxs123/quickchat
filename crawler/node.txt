@@ -1,0 +1,3 @@
+fnm env --use-on-cd > %TEMP%\fnm_env.cmd && call %TEMP%\fnm_env.cmd
+
+fnm use 16

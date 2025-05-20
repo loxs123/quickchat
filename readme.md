@@ -20,7 +20,8 @@
 ```bash
 pip install requests flask gunicorn
 
-export SILICONFLOW_API_KEY=YOURKEY
+export SILICONFLOW_API_KEY=YOURKEY # linux
+set SILICONFLOW_API_KEY=YOURKEY # window
 # API Key 获取地址：https://siliconflow.cn/
 
 gunicorn -w 2 -b 127.0.0.1:80 app:app
