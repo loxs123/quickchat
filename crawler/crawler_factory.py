@@ -37,8 +37,8 @@ class CrawlerFactory:
     }
 
     @staticmethod
-    def create_crawler(platform: str, **kw_args) -> AbstractCrawler:
+    def create_crawler(platform: str, playwright) -> AbstractCrawler:
         crawler_class = CrawlerFactory.CRAWLERS.get(platform)
         if not crawler_class:
             raise ValueError("Invalid Media Platform Currently only supported xhs or dy or ks or bili ...")
-        return crawler_class(**kw_args)
+        return crawler_class(playwright)

@@ -1,108 +1,90 @@
-from quart import Quart, render_template, request, jsonify, Response, make_response, send_file
-from werkzeug.utils import secure_filename
 import os
 import time
 import random
 import json
 import httpx  # 替代 requests，用于异步调用
 import re
+import copy
+
+import asyncio
+from playwright.async_api import async_playwright
+from quart import Quart, render_template, request, jsonify, Response, make_response, send_file
 
 # import crawler
 import sys
-sys.path.append(os.path.dirname(os.path.abspath(__file__)) + "\\crawler")
+sys.path.append(os.path.dirname(os.path.abspath(__file__)) + "/crawler")
 from crawler.crawler_factory import CrawlerFactory
+import crawler.config as cfg
 
+from utils import chat_model_api, stream_chat_model_api
 
 app = Quart(__name__)
-
-SILICONFLOW_API_KEY = os.getenv("SILICONFLOW_API_KEY")
 
 # 配置上传路径
 UPLOAD_FOLDER = 'uploads'
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
-
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
+crawler_cache = {}
+playwright = None
+en2zh = {'xhs': '小红书', 'bili': '哔哩哔哩', 'dy': '抖音', 'tieba': '贴吧', 'wb': '微博', 'zhihu': '知乎'}
 
-async def chat_model_api(query, mode="默认"):
-    prompt_prefix = {
-        "translate": "请将以下内容翻译成中文：",
-        "polish": "请润色以下文字，使其更通顺自然：",
-        "solve": "请解答下面的问题，并给出详细的解题步骤：",
-        "默认": ""
-    }
-    prompt = prompt_prefix.get(mode, "") + query
+@app.before_serving
+async def startup():
+    global crawler_cache, playwright
+    print("🌟 App starting...")
+    playwright = await async_playwright().start()
+    # 初始化 crawler_cache
+    crawler_cache['小红书'] = CrawlerFactory.create_crawler('xhs', playwright)
+    await crawler_cache['小红书'].start()
+    crawler_cache['哔哩哔哩'] = CrawlerFactory.create_crawler('bili', playwright)
+    await crawler_cache['哔哩哔哩'].start()
+    # crawler_cache['抖音'] = CrawlerFactory.create_crawler('dy', playwright)
+    # await crawler_cache['抖音'].start()
+    crawler_cache['贴吧'] = CrawlerFactory.create_crawler('tieba', playwright)
+    await crawler_cache['贴吧'].start()
+    crawler_cache['微博'] = CrawlerFactory.create_crawler('wb', playwright)
+    await crawler_cache['微博'].start()
+    crawler_cache['知乎'] = CrawlerFactory.create_crawler('zhihu', playwright)
+    await crawler_cache['知乎'].start()
 
-    payload = {
-        "model": "Qwen/Qwen2.5-72B-Instruct",
-        "messages": [{
-            "role": "user",
-            "content": prompt,
-        }]
-    }
-    headers = {
-        "accept": "application/json",
-        "content-type": "application/json",
-        "authorization": f"Bearer {SILICONFLOW_API_KEY}"
-    }
-    url = "https://api.siliconflow.cn/v1/chat/completions"
+    # await asyncio.gather(
+    #     crawler_cache['小红书'].start(),
+    #     crawler_cache['哔哩哔哩'].start(),
+    #     crawler_cache['抖音'].start(),
+    #     crawler_cache['贴吧'].start(),
+    #     crawler_cache['微博'].start(),
+    #     crawler_cache['知乎'].start()
+    # )
+    
+@app.after_serving
+async def shutdown():
+    playwright.stop()
+    print("App is shutting down...")
+    # 退出时遍历并关闭所有 crawler
+    for crawler in crawler_cache.values():
+        if hasattr(crawler, 'close') and callable(crawler.close):
+            try:
+                await crawler.close()
+            except Exception as e:
+                print(f"Error logging out crawler: {e}")
+    print('[DONE]')
 
-    try:
-        async with httpx.AsyncClient() as client:
-            response = await client.post(url, json=payload, headers=headers)
-            response.raise_for_status()
-            result = response.json()
-            return result['choices'][0]['message']['content']
-    except Exception as e:
-        return f"❌ 接口调用失败：{str(e)}"
+@app.route("/index_page")
+async def index():
+    resp = await make_response(await render_template('index.html'))
+    if not request.cookies.get('session_id'):
+        resp.set_cookie('session_id', f'{time.time()}-{random.randint(1, 100)}')
+    return resp
 
+@app.route("/process", methods=["POST"])
+async def process():
+    data = await request.get_json()
+    input_text = data.get("text", "")
+    mode = data.get("mode", "默认")
 
-async def stream_chat_model_api(query, mode="默认"):
-    prompt_prefix = {
-        "translate": "请将以下内容翻译成中文：",
-        "polish": "请润色以下文字，使其更通顺自然：",
-        "solve": "请解答下面的问题，并给出详细的解题步骤：",
-        "默认": ""
-    }
-    prompt = prompt_prefix.get(mode, "") + query
-    url = "https://api.siliconflow.cn/v1/chat/completions"
-
-    payload = {
-        "model": "Qwen/Qwen2.5-72B-Instruct",
-        "messages": [
-            {
-                "role": "user",
-                "content": prompt
-            }
-        ],
-        "stream": True,
-        "max_tokens": 4096,
-    }
-
-    headers = {
-        "accept": "application/json",
-        "content-type": "application/json",
-        "authorization": f"Bearer {SILICONFLOW_API_KEY}"
-    }
-
-    async with httpx.AsyncClient() as client:
-        async with client.stream("POST", url, json=payload, headers=headers) as response:
-            async for line in response.aiter_lines():
-                if not line:
-                    continue
-                if line.startswith("data: "):
-                    res = line[len("data: "):].strip()
-                    if res == "[DONE]":
-                        break
-                    try:
-                        parsed = json.loads(res)
-                        content = parsed["choices"][0]["delta"].get("content") or ""
-                        reasoning_content = parsed["choices"][0]["delta"].get("reasoning_content") or ""
-                        chunk = content + reasoning_content
-                        yield f"data: {chunk}-$#$-"
-                    except Exception as e:
-                        yield f"data: [ERROR] {str(e)}-$#$-"
-                        break
+    output = await chat_model_api(input_text, mode)
+    return jsonify({"result": output})
 
 @app.route("/stream_process", methods=["POST"])
 async def stream_process():
@@ -116,31 +98,34 @@ async def stream_process():
         cfgs = {cfg.split('=')[0] : cfg.split('=')[1] for cfg in cfgs}
         keywords = re.sub(r'\[.*?\]', '', input_text)
         cfgs['KEYWORDS'] = keywords
-        platforms = ['xhs', 'wb', 'bili', 'zhihu', 'dy', 'tieba']
+        # platforms = ['xhs', 'wb', 'bili', 'zhihu', 'dy', 'tieba']
+        if 'P' in cfgs:
+            platforms = cfgs['P'].split(',')
+            platforms = [en2zh[p.strip()] for p in platforms if p.strip() in en2zh]
+        else:
+            platforms = list(crawler_cache.keys())
 
         async def generate():
-            crawler = CrawlerFactory.create_crawler(platform=cfgs.get('P', random.choice(platforms)), **cfgs)
-            async for note in crawler.start():
-                yield f"data: {note}\n\n-$#$-"
+            # 这里可以根据需要选择不同的平台
+            abnormals = []
+            for p in platforms:
+                cnt = 0
+                crawler = crawler_cache[p]
+                async for note in crawler.search(**cfgs):
+                    yield f"data: ## {p}\n{note}\n\n-$#$-"
+                    cnt += 1
+                if cnt == 0:
+                    abnormals.append(p)
 
+            summary = '请求的平台为：' + ', '.join(platforms)
+
+            if len(abnormals) > 0:
+                summary += ', 但以下平台没有获取数据：' + ', '.join(abnormals)
+            else:
+                summary += ', 均请求成功'
+
+            yield f"data: {summary}\n\n-$#$-"
         return Response(generate(), content_type="text/event-stream")
-
-@app.route("/")
-async def index():
-    resp = await make_response(await render_template('index.html'))
-    if not request.cookies.get('session_id'):
-        resp.set_cookie('session_id', f'{time.time()}-{random.randint(1, 100)}')
-    return resp
-
-
-@app.route("/process", methods=["POST"])
-async def process():
-    data = await request.get_json()
-    input_text = data.get("text", "")
-    mode = data.get("mode", "默认")
-
-    output = await chat_model_api(input_text, mode)
-    return jsonify({"result": output})
 
 
 @app.route("/upload", methods=["POST"])
@@ -161,6 +146,14 @@ async def upload():
     return jsonify({"uploaded": saved_files})
 
 
+# if __name__ == "__main__":
+#     import asyncio
+#     app.run(host='127.0.0.1', port=5001, debug=True)
+
 if __name__ == "__main__":
-    import asyncio
-    app.run(host='127.0.0.1', port=5001, debug=True)
+    import hypercorn.asyncio
+    from hypercorn.config import Config
+    config = Config()
+    config.bind = ["0.0.0.0:80"]
+    config.startup_timeout = 500  # 延长 lifespan startup 阶段的等待时间
+    asyncio.run(hypercorn.asyncio.serve(app, config))

@@ -49,6 +49,7 @@ class WeiboClient:
         self.playwright_page = playwright_page
         self.cookie_dict = cookie_dict
         self._image_agent_host = "https://i1.wp.com/"
+        # utils.logger.info(f"[WeiboClient.request] request Headers {self.headers}")
 
     async def request(self, method, url, **kwargs) -> Union[Response, Dict]:
         enable_return_response = kwargs.pop("return_response", False)
@@ -60,7 +61,14 @@ class WeiboClient:
 
         if enable_return_response:
             return response
-
+        # text = response.text
+        # data = dict()
+        # if not text.strip():
+        #     data = json.loads(text)
+        # text = response.text
+        # utils.logger.info(f"[WeiboClient.request] request {text}")
+        # utils.logger.info(f"[WeiboClient.request] request kwargs ：{kwargs}")
+        
         data: Dict = response.json()
         ok_code = data.get("ok")
         if ok_code == 0:  # response error

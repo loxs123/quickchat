@@ -178,3 +178,4 @@ docs/.vitepress/cache
 test*.py
 test
 uploads
+*.zip

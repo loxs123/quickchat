@@ -40,3 +40,32 @@ def str2bool(v):
         return False
     else:
         raise argparse.ArgumentTypeError('Boolean value expected.')
+
+async def set_config(crawler, config, kwargs, platform):
+    new_kwargs = dict()
+    for key, value in kwargs.items():
+        if key == 'C': key = 'CRAWLER_MAX_NOTES_COUNT'
+        if key == 'P': continue
+        key = key.replace(f'{platform}_', '')
+        new_kwargs[key] = value
+        old_value = getattr(config, key)
+        if isinstance(old_value, bool):
+            if value == 'True':
+                setattr(config, key, True)
+            else:
+                setattr(config, key, False)
+        elif isinstance(old_value, int):
+            setattr(config, key, int(value))
+        else:
+            setattr(config, key, value)
+
+    if 'HEADLESS' not in new_kwargs:
+        config.HEADLESS = True
+    
+    if 'LOGIN_TYPE' not in new_kwargs:
+        config.LOGIN_TYPE = 'cookie'
+
+    if 'COOKIES' in kwargs:
+        await crawler.close()
+        await crawler.start()
+    

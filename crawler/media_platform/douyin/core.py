@@ -36,22 +36,12 @@ class DouYinCrawler(AbstractCrawler):
     dy_client: DOUYINClient
     browser_context: BrowserContext
 
-    def __init__(self, **kwargs) -> None:
+    def __init__(self, playwright) -> None:
         self.index_url = "https://www.douyin.com"
-
-        for key, value in kwargs.items():
-            if key == 'C': key = 'CRAWLER_MAX_NOTES_COUNT'
-            if key == 'P': continue
-            old_value = getattr(config, key)
-            if isinstance(old_value, bool):
-                if value == 'True':
-                    setattr(config, key, True)
-                else:
-                    setattr(config, key, False)
-            elif isinstance(old_value, int):
-                setattr(config, key, int(value))
-            else:
-                setattr(config, key, value)
+        config.COOKIES = config.DY_COOKIES # 
+        config.LOGIN_TYPE = 'qrcode'
+        config.HEADLESS = False
+        self.playwright = playwright
 
     async def start(self):
         playwright_proxy_format, httpx_proxy_format = None, None
@@ -60,88 +50,89 @@ class DouYinCrawler(AbstractCrawler):
             ip_proxy_info: IpInfoModel = await ip_proxy_pool.get_proxy()
             playwright_proxy_format, httpx_proxy_format = self.format_proxy_info(ip_proxy_info)
 
-        async with async_playwright() as playwright:
-            # Launch a browser context.
-            chromium = playwright.chromium
-            self.browser_context = await self.launch_browser(
-                chromium,
-                None,
-                user_agent=None,
-                headless=config.HEADLESS
+        self.chromium = self.playwright.chromium
+
+        self.browser_context = await self.launch_browser(
+            self.chromium,
+            None,
+            user_agent=None,
+            headless=config.HEADLESS
+        )
+        # stealth.min.js is a js script to prevent the website from detecting the crawler.
+        await self.browser_context.add_init_script(path=config.STEALTH_PATH)
+        self.context_page = await self.browser_context.new_page()
+        await self.context_page.goto(self.index_url)
+
+        self.dy_client = await self.create_douyin_client(httpx_proxy_format)
+        if not await self.dy_client.pong(browser_context=self.browser_context):
+            login_obj = DouYinLogin(
+                login_type=config.LOGIN_TYPE,
+                login_phone="",  # you phone number
+                browser_context=self.browser_context,
+                context_page=self.context_page,
+                cookie_str=config.COOKIES
             )
-            # stealth.min.js is a js script to prevent the website from detecting the crawler.
-            await self.browser_context.add_init_script(path=config.STEALTH_PATH)
-            self.context_page = await self.browser_context.new_page()
-            await self.context_page.goto(self.index_url)
+            await login_obj.begin()
+            await self.dy_client.update_cookies(browser_context=self.browser_context)
+        crawler_type_var.set(config.CRAWLER_TYPE)
 
-            self.dy_client = await self.create_douyin_client(httpx_proxy_format)
-            if not await self.dy_client.pong(browser_context=self.browser_context):
-                login_obj = DouYinLogin(
-                    login_type=config.LOGIN_TYPE,
-                    login_phone="",  # you phone number
-                    browser_context=self.browser_context,
-                    context_page=self.context_page,
-                    cookie_str=config.COOKIES
-                )
-                await login_obj.begin()
-                await self.dy_client.update_cookies(browser_context=self.browser_context)
-            crawler_type_var.set(config.CRAWLER_TYPE)
+    async def search(self, **kwargs) -> str:
+        await utils.set_config(self, config, kwargs, 'dy')
+        utils.logger.info("[DouYinCrawler.search] Begin search douyin keywords")
+        dy_limit_count = 10  # douyin limit page fixed value
+        if config.CRAWLER_MAX_NOTES_COUNT < dy_limit_count:
+            config.CRAWLER_MAX_NOTES_COUNT = dy_limit_count
+        start_page = config.START_PAGE  # start page number
 
-            utils.logger.info("[DouYinCrawler.search] Begin search douyin keywords")
-            dy_limit_count = 10  # douyin limit page fixed value
-            if config.CRAWLER_MAX_NOTES_COUNT < dy_limit_count:
-                config.CRAWLER_MAX_NOTES_COUNT = dy_limit_count
-            start_page = config.START_PAGE  # start page number
-
-            source_keyword_var.set(config.KEYWORDS)
-            utils.logger.info(f"[DouYinCrawler.search] Current keyword: {config.KEYWORDS}")
-            aweme_list: List[str] = []
-            page = 0
-            dy_search_id = ""
-            note_cnt = 0
-            while note_cnt < config.CRAWLER_MAX_NOTES_COUNT:
-                if page < start_page:
-                    utils.logger.info(f"[DouYinCrawler.search] Skip {page}")
-                    page += 1
-                    continue
-                try:
-                    utils.logger.info(f"[DouYinCrawler.search] search douyin keyword: {config.KEYWORDS}, page: {page}")
-                    posts_res = await self.dy_client.search_info_by_keyword(keyword=config.KEYWORDS,
-                                                                            offset=page * dy_limit_count - dy_limit_count,
-                                                                            publish_time=PublishTimeType(config.PUBLISH_TIME_TYPE),
-                                                                            search_id=dy_search_id
-                                                                            )
-                    if posts_res.get("data") is None or posts_res.get("data") == []:
-                        utils.logger.info(f"[DouYinCrawler.search] search douyin keyword: {config.KEYWORDS}, page: {page} is empty,{posts_res.get('data')}`")
-                        break
-                except DataFetchError:
-                    utils.logger.error(f"[DouYinCrawler.search] search douyin keyword: {config.KEYWORDS} failed")
-                    break
-
+        source_keyword_var.set(config.KEYWORDS)
+        utils.logger.info(f"[DouYinCrawler.search] Current keyword: {config.KEYWORDS}")
+        aweme_list: List[str] = []
+        page = 0
+        dy_search_id = ""
+        note_cnt = 0
+        while note_cnt < config.CRAWLER_MAX_NOTES_COUNT:
+            if page < start_page:
+                utils.logger.info(f"[DouYinCrawler.search] Skip {page}")
                 page += 1
-                if "data" not in posts_res:
-                    utils.logger.error(
-                        f"[DouYinCrawler.search] search douyin keyword: {config.KEYWORDS} failed，账号也许被风控了。")
+                continue
+            try:
+                utils.logger.info(f"[DouYinCrawler.search] search douyin keyword: {config.KEYWORDS}, page: {page}")
+                posts_res = await self.dy_client.search_info_by_keyword(keyword=config.KEYWORDS,
+                                                                        offset=page * dy_limit_count - dy_limit_count,
+                                                                        publish_time=PublishTimeType(config.PUBLISH_TIME_TYPE),
+                                                                        search_id=dy_search_id
+                                                                        )
+                if posts_res.get("data") is None or posts_res.get("data") == []:
+                    utils.logger.info(f"[DouYinCrawler.search] search douyin keyword: {config.KEYWORDS}, page: {page} is empty,{posts_res.get('data')}`")
                     break
-                dy_search_id = posts_res.get("extra", {}).get("logid", "")
-                for post_item in posts_res.get("data"):
-                    try:
-                        aweme_info: Dict = post_item.get("aweme_info") or \
-                                        post_item.get("aweme_mix_info", {}).get("mix_items")[0]
-                    except TypeError:
-                        continue
-                    aweme_list.append(aweme_info.get("aweme_id", ""))
-                     
-                    md = await douyin_store.update_douyin_aweme(aweme_item=aweme_info)
-                    yield md
+            except DataFetchError:
+                utils.logger.error(f"[DouYinCrawler.search] search douyin keyword: {config.KEYWORDS} failed")
+                break
 
-                    note_cnt += 1
+            page += 1
+            if "data" not in posts_res:
+                utils.logger.error(
+                    f"[DouYinCrawler.search] search douyin keyword: {config.KEYWORDS} failed，账号也许被风控了。")
+                break
+            dy_search_id = posts_res.get("extra", {}).get("logid", "")
+            for post_item in posts_res.get("data"):
+                try:
+                    aweme_info: Dict = post_item.get("aweme_info") or \
+                                    post_item.get("aweme_mix_info", {}).get("mix_items")[0]
+                except TypeError:
+                    continue
+                aweme_list.append(aweme_info.get("aweme_id", ""))
+                    
+                md = await douyin_store.update_douyin_aweme(aweme_item=aweme_info)
+                yield md
 
-                    if note_cnt >= config.CRAWLER_MAX_NOTES_COUNT:
-                        break
+                note_cnt += 1
 
-            utils.logger.info(f"[DouYinCrawler.search] keyword:{config.KEYWORDS}, aweme_list:{aweme_list}")
-            await self.batch_get_note_comments(aweme_list)
+                if note_cnt >= config.CRAWLER_MAX_NOTES_COUNT:
+                    break
+
+        utils.logger.info(f"[DouYinCrawler.search] keyword:{config.KEYWORDS}, aweme_list:{aweme_list}")
+        await self.batch_get_note_comments(aweme_list)
 
     async def get_specified_awemes(self):
         """Get the information and comments of the specified post"""
@@ -275,7 +266,7 @@ class DouYinCrawler(AbstractCrawler):
         """Launch browser and create browser context"""
         if config.SAVE_LOGIN_STATE:
             user_data_dir = os.path.join(os.getcwd(), "browser_data",
-                                         config.USER_DATA_DIR % config.PLATFORM)  # type: ignore
+                                         config.USER_DATA_DIR % 'dy')  # type: ignore
             browser_context = await chromium.launch_persistent_context(
                 user_data_dir=user_data_dir,
                 accept_downloads=True,

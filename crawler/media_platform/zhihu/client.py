@@ -84,6 +84,7 @@ class ZhiHuClient(AbstractApiClient):
                 method, url, timeout=self.timeout,
                 **kwargs
             )
+        # utils.logger.info(f"[ZhiHuClient.request] {kwargs} : {method}")
 
         if response.status_code != 200:
             utils.logger.error(f"[ZhiHuClient.request] Requset Url: {url}, Request error: {response.text}")

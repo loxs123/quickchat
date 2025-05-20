@@ -13,8 +13,16 @@
 PLATFORM = "xhs" # 平台名称，支持：xhs、dy、ks、bili、wb、tieba、zhihu
 KEYWORDS = "足球"  # 关键词搜索配置，以英文逗号分隔
 LOGIN_TYPE = "cookie"  # qrcode or phone or cookie
-COOKIES = "x-user-id-creator.xiaohongshu.com=5e95337a0000000001005851; gid=yYfWYjfjjKi8yYfWYjfYi8yId4jWC1u3A4jYdqEV8ExT0J280FuDSY888JjYJqJ82iyqj48q; abRequestId=76b634c650413aa67b645ef8f90476b7; customerClientId=473594761764599; a1=194fa7b5de267699iksw72j8prqgr41u1h6339euf50000837707; webId=4800a89d2df28af40822dbe40c37074b; access-token-creator.xiaohongshu.com=customer.creator.AT-68c517498911671060903518ddm1hcl9wf7qiosz; galaxy_creator_session_id=NU0qxcBrMVJIaSBG9N3j4T4DOkRaN272VjVe; galaxy.creator.beaker.session.id=1745976431573034709606; xsecappid=xhs-pc-web; acw_tc=0a00dd8917476634438266630e1a719a5752c57e44f078761f7f32e7a06a3c; webBuild=4.62.3; loadts=1747663440335; websectiga=3fff3a6f9f07284b62c0f2ebf91a3b10193175c06e4f71492b60e056edcdebb2; sec_poison_id=d31e3071-2670-4dec-a7d8-76374e850e33; web_session=0400698fe17032560807db721e3a4b185efee4; unread={%22ub%22:%22682a1ba300000000210097b3%22%2C%22ue%22:%22682a99d0000000002300002a%22%2C%22uc%22:26}"
-# COOKIES = "buvid4=5EDF2BBB-77CB-0707-F959-E2615F1DDF8C20576-023012722-BpftfWdbUwTSaxivXiug7Q%3D%3D; buvid_fp_plain=undefined; DedeUserID=381513858; DedeUserID__ckMd5=445a7cd327968e3c; CURRENT_BLACKGAP=0; header_theme_version=CLOSE; enable_web_push=DISABLE; bntyh_content4=2024-8-20; fingerprint=61169110d97a18850155ae5b4445ab63; buvid_fp=61169110d97a18850155ae5b4445ab63; _uuid=53BB7C66-1BAC-7D56-9B43-433ED271D57680040infoc; is-2022-channel=1; CURRENT_QUALITY=64; buvid3=7BB52E30-1519-D094-BCA4-32EBCFE033B262257infoc; b_nut=1741091462; enable_feed_channel=ENABLE; rpdid=|(k||)|kJJlu0J'u~RRYJkRYk; PVID=1; home_feed_column=4; bili_ticket=eyJhbGciOiJIUzI1NiIsImtpZCI6InMwMyIsInR5cCI6IkpXVCJ9.eyJleHAiOjE3NDc4MTUyNzgsImlhdCI6MTc0NzU1NjAxOCwicGx0IjotMX0.ySc5ijVH5uUAPsfbWkhYXZIMdXHiEdeuKo3BdleKT54; bili_ticket_expires=1747815218; bmg_af_switch=1; b_lsid=13CE88101_196E66BEC89; CURRENT_FNVAL=2000; bmg_src_def_domain=i2.hdslb.com; SESSDATA=11bb78f7%2C1763174661%2C4d1fe%2A52CjA3Yyjpz5W3HXYUbAvektDATnRalylqtMaoFkqHd7Btz6tScxTBKMgAfGsHWqqYlIASVkdNVGlKTjRqNHN4MlR6WFBVUi01alRSVFBVYWEwTEdrWDlndUo5cG9TaVp1b2JnUG5KcGVyQVF4SU9BTWZldmVnbE9QU2JyNVV1VWpUTWZqdDV3TGFnIIEC; bili_jct=fabefcbe015df032477ec354a3668d78; sid=6dxjeil6; bp_t_offset_381513858=1068520286229364736; browser_resolution=283-591" # bili
+COOKIES = ""
+
+# 登录cookie配置
+XHS_COOKIES = ""
+BILI_COOKIES = ""
+DY_COOKIES = ""
+TIEBA_COOKIES = ""
+WEIBO_COOKIES = ""
+ZHIHU_COOKIES = ""
+
 # 具体值参见media_platform.xxx.field下的枚举值，暂时只支持小红书
 SORT_TYPE = "popularity_descending"
 # 具体值参见media_platform.xxx.field下的枚举值，暂时只支持抖音

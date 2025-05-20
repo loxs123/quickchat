@@ -38,24 +38,11 @@ class TieBaCrawler(AbstractCrawler):
     tieba_client: BaiduTieBaClient
     browser_context: BrowserContext
 
-    def __init__(self, **kwargs) -> None:
+    def __init__(self, playwright) -> None:
         self.index_url = "https://tieba.baidu.com"
         self.user_agent = utils.get_user_agent()
         self._page_extractor = TieBaExtractor()
-        for key, value in kwargs.items():
-            if key == 'C': key = 'CRAWLER_MAX_NOTES_COUNT'
-            if key == 'P': continue
-            old_value = getattr(config, key)
-            if isinstance(old_value, bool):
-                if value == 'True':
-                    setattr(config, key, True)
-                else:
-                    setattr(config, key, False)
-            elif isinstance(old_value, int):
-                setattr(config, key, int(value))
-            else:
-                setattr(config, key, value)
-
+        
     async def start(self) -> None:
         """
         Start the crawler
@@ -77,7 +64,8 @@ class TieBaCrawler(AbstractCrawler):
         )
         crawler_type_var.set(config.CRAWLER_TYPE)
         
-
+    async def search(self, **kwargs) -> str:
+        await utils.set_config(self, config, kwargs, 'tieba')
         utils.logger.info("[BaiduTieBaCrawler.search] Begin search baidu tieba keywords")
         tieba_limit_count = 10  # tieba limit page fixed value
         note_cnt = 0
@@ -279,7 +267,7 @@ class TieBaCrawler(AbstractCrawler):
             # feat issue #14
             # we will save login state to avoid login every time
             user_data_dir = os.path.join(os.getcwd(), "browser_data",
-                                         config.USER_DATA_DIR % config.PLATFORM)  # type: ignore
+                                         config.USER_DATA_DIR % 'tieba')  # type: ignore
             browser_context = await chromium.launch_persistent_context(
                 user_data_dir=user_data_dir,
                 accept_downloads=True,

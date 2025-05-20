@@ -24,7 +24,6 @@ from media_platform.weibo import WeiboCrawler
 from media_platform.xhs import XiaoHongShuCrawler
 from media_platform.zhihu import ZhihuCrawler
 
-
 class CrawlerFactory:
     CRAWLERS = {
         "xhs": XiaoHongShuCrawler,
@@ -41,8 +40,7 @@ class CrawlerFactory:
         crawler_class = CrawlerFactory.CRAWLERS.get(platform)
         if not crawler_class:
             raise ValueError("Invalid Media Platform Currently only supported xhs or dy or ks or bili ...")
-        return crawler_class()
-
+        return crawler_class()    
 
 async def main():
     # parse cmd

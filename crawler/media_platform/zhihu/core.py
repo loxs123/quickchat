@@ -39,25 +39,15 @@ class ZhihuCrawler(AbstractCrawler):
     zhihu_client: ZhiHuClient
     browser_context: BrowserContext
 
-    def __init__(self, **kwargs) -> None:
+    def __init__(self, playwright) -> None:
         self.index_url = "https://www.zhihu.com"
         # self.user_agent = utils.get_user_agent()
         self.user_agent = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36"
         self._extractor = ZhihuExtractor()
-        for key, value in kwargs.items():
-            if key == 'C': key = 'CRAWLER_MAX_NOTES_COUNT'
-            if key == 'P': continue
-            old_value = getattr(config, key)
-
-            if isinstance(old_value, bool):
-                if value == 'True':
-                    setattr(config, key, True)
-                else:
-                    setattr(config, key, False)
-            elif isinstance(old_value, int):
-                setattr(config, key, int(value))
-            else:
-                setattr(config, key, value)
+        config.COOKIES = config.ZHIHU_COOKIES # 
+        config.LOGIN_TYPE = 'cookie'
+        config.HEADLESS = True
+        self.playwright = playwright
 
     async def start(self):
         """
@@ -71,81 +61,81 @@ class ZhihuCrawler(AbstractCrawler):
             ip_proxy_info: IpInfoModel = await ip_proxy_pool.get_proxy()
             playwright_proxy_format, httpx_proxy_format = self.format_proxy_info(ip_proxy_info)
 
-        async with async_playwright() as playwright:
-            # Launch a browser context.
-            chromium = playwright.chromium
-            self.browser_context = await self.launch_browser(
-                chromium,
-                None,
-                self.user_agent,
-                headless=config.HEADLESS
+        # Launch a browser context.
+        self.chromium = self.playwright.chromium
+        self.browser_context = await self.launch_browser(
+            self.chromium,
+            None,
+            self.user_agent,
+            headless=config.HEADLESS
+        )
+        # stealth.min.js is a js script to prevent the website from detecting the crawler.
+        await self.browser_context.add_init_script(path=config.STEALTH_PATH)
+
+        self.context_page = await self.browser_context.new_page()
+        await self.context_page.goto(self.index_url, wait_until="domcontentloaded")
+
+        # Create a client to interact with the zhihu website.
+        self.zhihu_client = await self.create_zhihu_client(httpx_proxy_format)
+        if not await self.zhihu_client.pong():
+            login_obj = ZhiHuLogin(
+                login_type=config.LOGIN_TYPE,
+                login_phone="",  # input your phone number
+                browser_context=self.browser_context,
+                context_page=self.context_page,
+                cookie_str=config.COOKIES
             )
-            # stealth.min.js is a js script to prevent the website from detecting the crawler.
-            await self.browser_context.add_init_script(path=config.STEALTH_PATH)
-
-            self.context_page = await self.browser_context.new_page()
-            await self.context_page.goto(self.index_url, wait_until="domcontentloaded")
-
-            # Create a client to interact with the zhihu website.
-            self.zhihu_client = await self.create_zhihu_client(httpx_proxy_format)
-            if not await self.zhihu_client.pong():
-                login_obj = ZhiHuLogin(
-                    login_type=config.LOGIN_TYPE,
-                    login_phone="",  # input your phone number
-                    browser_context=self.browser_context,
-                    context_page=self.context_page,
-                    cookie_str=config.COOKIES
-                )
-                await login_obj.begin()
-                await self.zhihu_client.update_cookies(browser_context=self.browser_context)
-
-            # 知乎的搜索接口需要打开搜索页面之后cookies才能访问API，单独的首页不行
-            utils.logger.info("[ZhihuCrawler.start] Zhihu跳转到搜索页面获取搜索页面的Cookies，该过程需要5秒左右")
-            await self.context_page.goto(f"{self.index_url}/search?q=python&search_source=Guess&utm_content=search_hot&type=content")
-            await asyncio.sleep(5)
+            await login_obj.begin()
             await self.zhihu_client.update_cookies(browser_context=self.browser_context)
 
-            crawler_type_var.set(config.CRAWLER_TYPE)
-                
-            """Search for notes and retrieve their comment information."""
-            utils.logger.info("[ZhihuCrawler.search] Begin search zhihu keywords")
-            zhihu_limit_count = 20  # zhihu limit page fixed value
-            if config.CRAWLER_MAX_NOTES_COUNT < zhihu_limit_count:
-                config.CRAWLER_MAX_NOTES_COUNT = zhihu_limit_count
-            start_page = config.START_PAGE
-            source_keyword_var.set(config.KEYWORDS)
-            utils.logger.info(f"[ZhihuCrawler.search] Current search keyword: {config.KEYWORDS}")
-            page = 1
-            note_cnt = 0
-            while note_cnt < config.CRAWLER_MAX_NOTES_COUNT:
-                if page < start_page:
-                    utils.logger.info(f"[ZhihuCrawler.search] Skip page {page}")
-                    page += 1
-                    continue
+        # 知乎的搜索接口需要打开搜索页面之后cookies才能访问API，单独的首页不行
+        utils.logger.info("[ZhihuCrawler.start] Zhihu跳转到搜索页面获取搜索页面的Cookies，该过程需要5秒左右")
+        await self.context_page.goto(f"{self.index_url}/search?q=python&search_source=Guess&utm_content=search_hot&type=content")
+        await asyncio.sleep(5)
+        await self.zhihu_client.update_cookies(browser_context=self.browser_context)
 
-                try:
-                    utils.logger.info(f"[ZhihuCrawler.search] search zhihu keyword: {config.KEYWORDS}, page: {page}")
-                    content_list: List[ZhihuContent]  = await self.zhihu_client.get_note_by_keyword(
-                        keyword=config.KEYWORDS,
-                        page=page,
-                    )
-                    utils.logger.info(f"[ZhihuCrawler.search] Search contents :{content_list}")
-                    if not content_list:
-                        utils.logger.info("No more content!")
+        crawler_type_var.set(config.CRAWLER_TYPE)
+
+    async def search(self, **kwargs) -> str:
+        """Search for notes and retrieve their comment information."""
+        await utils.set_config(self, config, kwargs, 'zhihu')
+        utils.logger.info("[ZhihuCrawler.search] Begin search zhihu keywords")
+        zhihu_limit_count = 20  # zhihu limit page fixed value
+
+        start_page = config.START_PAGE
+        source_keyword_var.set(config.KEYWORDS)
+        utils.logger.info(f"[ZhihuCrawler.search] Current search keyword: {config.KEYWORDS}")
+        page = 1
+        note_cnt = 0
+        while note_cnt < config.CRAWLER_MAX_NOTES_COUNT:
+            if page < start_page:
+                utils.logger.info(f"[ZhihuCrawler.search] Skip page {page}")
+                page += 1
+                continue
+
+            try:
+                utils.logger.info(f"[ZhihuCrawler.search] search zhihu keyword: {config.KEYWORDS}, page: {page}")
+                content_list: List[ZhihuContent]  = await self.zhihu_client.get_note_by_keyword(
+                    keyword=config.KEYWORDS,
+                    page=page,
+                )
+                utils.logger.info(f"[ZhihuCrawler.search] Search contents :{content_list}")
+                if not content_list:
+                    utils.logger.info("No more content!")
+                    break
+
+                page += 1
+                for content in content_list:
+                    md = await zhihu_store.update_zhihu_content(content)
+                    yield md
+                    note_cnt += 1
+                    if note_cnt >= config.CRAWLER_MAX_NOTES_COUNT:
                         break
 
-                    page += 1
-                    for content in content_list:
-                        md = await zhihu_store.update_zhihu_content(content)
-                        yield md
-                        note_cnt += 1
-                        if note_cnt >= config.CRAWLER_MAX_NOTES_COUNT:
-                            break
-
-                    await self.batch_get_content_comments(content_list)
-                except DataFetchError:
-                    utils.logger.error("[ZhihuCrawler.search] Search content error")
-                    return
+                await self.batch_get_content_comments(content_list)
+            except DataFetchError:
+                utils.logger.error("[ZhihuCrawler.search] Search content error")
+                break
 
     async def batch_get_content_comments(self, content_list: List[ZhihuContent]):
         """
@@ -351,7 +341,7 @@ class ZhihuCrawler(AbstractCrawler):
             # feat issue #14
             # we will save login state to avoid login every time
             user_data_dir = os.path.join(os.getcwd(), "browser_data",
-                                         config.USER_DATA_DIR % config.PLATFORM)  # type: ignore
+                                         config.USER_DATA_DIR % 'zhihu')  # type: ignore
             browser_context = await chromium.launch_persistent_context(
                 user_data_dir=user_data_dir,
                 accept_downloads=True,

@@ -40,23 +40,14 @@ class XiaoHongShuCrawler(AbstractCrawler):
     xhs_client: XiaoHongShuClient
     browser_context: BrowserContext
 
-    def __init__(self, **kwargs) -> None:
+    def __init__(self, playwright) -> None:
         self.index_url = "https://www.xiaohongshu.com"
         # self.user_agent = utils.get_user_agent()
         self.user_agent = config.UA if config.UA else "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36"
-        for key, value in kwargs.items():
-            if key == 'C': key = 'CRAWLER_MAX_NOTES_COUNT'
-            if key == 'P': continue
-            old_value = getattr(config, key)
-            if isinstance(old_value, bool):
-                if value == 'True':
-                    setattr(config, key, True)
-                else:
-                    setattr(config, key, False)
-            elif isinstance(old_value, int):
-                setattr(config, key, int(value))
-            else:
-                setattr(config, key, value)
+        config.COOKIES = config.XHS_COOKIES # 
+        config.LOGIN_TYPE = 'cookie'
+        config.HEADLESS = True
+        self.playwright = playwright
 
     async def start(self):
         playwright_proxy_format, httpx_proxy_format = None, None
@@ -69,120 +60,123 @@ class XiaoHongShuCrawler(AbstractCrawler):
                 ip_proxy_info
             )
 
-        async with async_playwright() as playwright:
+        # self.playwright = await async_playwright().start()
+        # async with async_playwright() as playwright:
             # self.playwright = await async_playwright().start()
             # Launch a browser context.
-            chromium = playwright.chromium
-            self.browser_context = await self.launch_browser(
-                chromium, None, self.user_agent, headless=config.HEADLESS
-            )
-            # stealth.min.js is a js script to prevent the website from detecting the crawler.
-            await self.browser_context.add_init_script(path=config.STEALTH_PATH)
-            # add a cookie attribute webId to avoid the appearance of a sliding captcha on the webpage
-            await self.browser_context.add_cookies(
-                [
-                    {
-                        "name": "webId",
-                        "value": "xxx123",  # any value
-                        "domain": ".xiaohongshu.com",
-                        "path": "/",
-                    }
-                ]
-            )
-            self.context_page = await self.browser_context.new_page()
-            await self.context_page.goto(self.index_url)
+        self.chromium = self.playwright.chromium
+        self.browser_context = await self.launch_browser(
+            self.chromium, None, self.user_agent, headless=config.HEADLESS
+        )
+        # stealth.min.js is a js script to prevent the website from detecting the crawler.
+        await self.browser_context.add_init_script(path=config.STEALTH_PATH)
+        # add a cookie attribute webId to avoid the appearance of a sliding captcha on the webpage
+        await self.browser_context.add_cookies(
+            [
+                {
+                    "name": "webId",
+                    "value": "xxx123",  # any value
+                    "domain": ".xiaohongshu.com",
+                    "path": "/",
+                }
+            ]
+        )
+        self.context_page = await self.browser_context.new_page()
+        await self.context_page.goto(self.index_url)
 
-            # Create a client to interact with the xiaohongshu website.
-            self.xhs_client = await self.create_xhs_client(httpx_proxy_format)
-            if not await self.xhs_client.pong():
-                login_obj = XiaoHongShuLogin(
-                    login_type=config.LOGIN_TYPE,
-                    login_phone="",  # input your phone number
-                    browser_context=self.browser_context,
-                    context_page=self.context_page,
-                    cookie_str=config.COOKIES,
+        # Create a client to interact with the xiaohongshu website.
+        self.xhs_client = await self.create_xhs_client(httpx_proxy_format)
+        if not await self.xhs_client.pong():
+            login_obj = XiaoHongShuLogin(
+                login_type=config.LOGIN_TYPE,
+                login_phone="",  # input your phone number
+                browser_context=self.browser_context,
+                context_page=self.context_page,
+                cookie_str=config.COOKIES,
+            )
+            await login_obj.begin()
+            await self.xhs_client.update_cookies(
+                browser_context=self.browser_context
+            )
+
+        crawler_type_var.set(config.CRAWLER_TYPE)
+
+    async def search(self, **kwargs) -> str:
+        await utils.set_config(self, config, kwargs, 'xhs')
+        utils.logger.info(
+            "[XiaoHongShuCrawler.search] Begin search xiaohongshu keywords"
+        )
+
+        start_page = config.START_PAGE
+        utils.logger.info(f'[XiaoHongShuCrawler.search] {config.KEYWORDS}')
+
+        source_keyword_var.set(config.KEYWORDS)
+        page = 1
+        search_id = get_search_id()
+        note_cnt = 0
+        while note_cnt < config.CRAWLER_MAX_NOTES_COUNT:
+            if page < start_page:
+                utils.logger.info(f"[XiaoHongShuCrawler.search] Skip page {page}")
+                page += 1
+                continue
+
+            try:
+                utils.logger.info(
+                    f"[XiaoHongShuCrawler.search] search xhs keyword: {config.KEYWORDS}, page: {page}"
                 )
-                await login_obj.begin()
-                await self.xhs_client.update_cookies(
-                    browser_context=self.browser_context
+                note_ids: List[str] = []
+                xsec_tokens: List[str] = []
+                notes_res = await self.xhs_client.get_note_by_keyword(
+                    keyword=config.KEYWORDS,
+                    search_id=search_id,
+                    page=page,
+                    sort=(
+                        SearchSortType(config.SORT_TYPE)
+                        if config.SORT_TYPE != ""
+                        else SearchSortType.GENERAL
+                    ),
                 )
-
-            crawler_type_var.set(config.CRAWLER_TYPE)
-            
-            utils.logger.info(
-                "[XiaoHongShuCrawler.search] Begin search xiaohongshu keywords"
-            )
-
-            start_page = config.START_PAGE
-            utils.logger.info(f'[XiaoHongShuCrawler.search] {config.KEYWORDS}')
-
-            source_keyword_var.set(config.KEYWORDS)
-            page = 1
-            search_id = get_search_id()
-            note_cnt = 0
-            while note_cnt < config.CRAWLER_MAX_NOTES_COUNT:
-                if page < start_page:
-                    utils.logger.info(f"[XiaoHongShuCrawler.search] Skip page {page}")
-                    page += 1
-                    continue
-
-                try:
-                    utils.logger.info(
-                        f"[XiaoHongShuCrawler.search] search xhs keyword: {config.KEYWORDS}, page: {page}"
-                    )
-                    note_ids: List[str] = []
-                    xsec_tokens: List[str] = []
-                    notes_res = await self.xhs_client.get_note_by_keyword(
-                        keyword=config.KEYWORDS,
-                        search_id=search_id,
-                        page=page,
-                        sort=(
-                            SearchSortType(config.SORT_TYPE)
-                            if config.SORT_TYPE != ""
-                            else SearchSortType.GENERAL
-                        ),
-                    )
-                    utils.logger.info(
-                        f"[XiaoHongShuCrawler.search] Search notes res:{notes_res}"
-                    )
-                    if not notes_res or not notes_res.get("has_more", False):
-                        utils.logger.info("No more content!")
-                        break
-                    notes_res = notes_res.get("items", [])
-                    semaphore = asyncio.Semaphore(config.MAX_CONCURRENCY_NUM)
-                    for i in range(len(notes_res)):
-                        post_item = notes_res[i]
-                        if post_item.get("model_type") not in ("rec_query", "hot_query"):
-                            post_item = notes_res[i]
-                            note_detail = await self.get_note_detail_async_task(
-                                note_id=post_item.get("id"),
-                                xsec_source=post_item.get("xsec_source"),
-                                xsec_token=post_item.get("xsec_token"),
-                                semaphore=semaphore,
-                            )
-                            if note_detail:
-                                md = await xhs_store.update_xhs_note(note_detail)
-                                await self.get_notice_media(note_detail)
-                                note_ids.append(note_detail.get("note_id"))
-                                xsec_tokens.append(note_detail.get("xsec_token"))
-
-                                yield md
-
-                                # 先不管评论
-                                # note_comments = await self.batch_get_note_comments(note_ids, xsec_tokens)
-                                # utils.logger.info(f'[XiaoHongShuCrawler.search] {note_details}')
-
-                                note_cnt += 1
-                                if note_cnt >= config.CRAWLER_MAX_NOTES_COUNT:
-                                    break
-
-                    page += 1
-
-                except DataFetchError as e:
-                    utils.logger.error(
-                        "[XiaoHongShuCrawler.search] Get note detail error"
-                    )
+                utils.logger.info(
+                    f"[XiaoHongShuCrawler.search] Search notes res:{notes_res}"
+                )
+                if not notes_res or not notes_res.get("has_more", False):
+                    utils.logger.info("No more content!")
                     break
+                notes_res = notes_res.get("items", [])
+                semaphore = asyncio.Semaphore(config.MAX_CONCURRENCY_NUM)
+                for i in range(len(notes_res)):
+                    post_item = notes_res[i]
+                    if post_item.get("model_type") not in ("rec_query", "hot_query"):
+                        post_item = notes_res[i]
+                        note_detail = await self.get_note_detail_async_task(
+                            note_id=post_item.get("id"),
+                            xsec_source=post_item.get("xsec_source"),
+                            xsec_token=post_item.get("xsec_token"),
+                            semaphore=semaphore,
+                        )
+                        if note_detail:
+                            md = await xhs_store.update_xhs_note(note_detail)
+                            await self.get_notice_media(note_detail)
+                            note_ids.append(note_detail.get("note_id"))
+                            xsec_tokens.append(note_detail.get("xsec_token"))
+
+                            yield md
+
+                            # 先不管评论
+                            # note_comments = await self.batch_get_note_comments(note_ids, xsec_tokens)
+                            # utils.logger.info(f'[XiaoHongShuCrawler.search] {note_details}')
+
+                            note_cnt += 1
+                            if note_cnt >= config.CRAWLER_MAX_NOTES_COUNT:
+                                break
+
+                page += 1
+
+            except DataFetchError as e:
+                utils.logger.error(
+                    "[XiaoHongShuCrawler.search] Get note detail error"
+                )
+                break
 
 
     async def get_creators_and_notes(self) -> None:
@@ -436,7 +430,7 @@ class XiaoHongShuCrawler(AbstractCrawler):
             # feat issue #14
             # we will save login state to avoid login every time
             user_data_dir = os.path.join(
-                os.getcwd(), "browser_data", config.USER_DATA_DIR % config.PLATFORM
+                os.getcwd(), "browser_data", config.USER_DATA_DIR % 'xhs'
             )  # type: ignore
             browser_context = await chromium.launch_persistent_context(
                 user_data_dir=user_data_dir,

@@ -114,6 +114,7 @@ class WeiboLogin(AbstractLogin):
 
     async def login_by_cookies(self):
         utils.logger.info("[WeiboLogin.login_by_qrcode] Begin login weibo by cookie ...")
+        # utils.logger.info(f"[WeiboLogin.login_by_qrcode] COOKIES: {self.cookie_str} ...")
         for key, value in utils.convert_str_cookie_to_dict(self.cookie_str).items():
             await self.browser_context.add_cookies([{
                 'name': key,
