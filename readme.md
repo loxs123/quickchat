@@ -17,14 +17,47 @@
 
 ## 部署说明
 
+### 本地
 ```bash
-pip install requests flask gunicorn
-
-export SILICONFLOW_API_KEY=YOURKEY # linux
-set SILICONFLOW_API_KEY=YOURKEY # window
+git clone https://github.com/loxs123/quickchat.git
+cd quickchat
+pip install -r requirements.txt
+playwright install
+export SILICONFLOW_API_KEY=YOURKEY
 # API Key 获取地址：https://siliconflow.cn/
 
-gunicorn -w 2 -b 127.0.0.1:80 app:app
+nohup python app.py &
+
 ```
 
-> 仅供学习和研究使用。
+### 结合 gunicorn 和 nginx
+
+```bash
+pip install gunicorn
+nohup gunicorn -w 2 -b 127.0.0.1:8000 app:app &
+sudo apt install nginx
+sudo tee /etc/nginx/sites-available/myapp <<EOF
+server {
+    listen 80;
+    server_name _;
+
+    location / {
+        proxy_pass http://127.0.0.1:8000;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+    }
+}
+EOF
+sudo ln -s /etc/nginx/sites-available/myapp /etc/nginx/sites-enabled/
+sudo rm /etc/nginx/sites-enabled/default
+sudo nginx -t
+# nginx: configuration file /etc/nginx/nginx.conf test is successful
+sudo systemctl reload nginx
+
+```
+
+## 体验网站
+
+http://101.200.43.46/
+
+> 仅供学习使用。
