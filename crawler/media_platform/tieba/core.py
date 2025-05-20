@@ -100,7 +100,7 @@ class TieBaCrawler(AbstractCrawler):
                 page += 1
             except Exception as ex:
                 utils.logger.error(
-                    f"[BaiduTieBaCrawler.search] Search keywords error, current page: {page}, current keyword: {keyword}, err: {ex}")
+                    f"[BaiduTieBaCrawler.search] Search keywords error, current page: {page}, current keyword: {config.KEYWORDS}, err: {ex}")
                 break
 
     async def get_specified_tieba_notes(self):
