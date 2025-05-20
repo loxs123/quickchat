@@ -136,6 +136,9 @@ class ZhihuCrawler(AbstractCrawler):
             except DataFetchError:
                 utils.logger.error("[ZhihuCrawler.search] Search content error")
                 break
+            except Exception as e:
+                utils.logger.error(f"[ZhihuCrawler.search] Search error {e}")
+                break
 
     async def batch_get_content_comments(self, content_list: List[ZhihuContent]):
         """

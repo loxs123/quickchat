@@ -98,12 +98,13 @@ async def stream_process():
         cfgs = {cfg.split('=')[0] : cfg.split('=')[1] for cfg in cfgs}
         keywords = re.sub(r'\[.*?\]', '', input_text)
         cfgs['KEYWORDS'] = keywords
-        # platforms = ['xhs', 'wb', 'bili', 'zhihu', 'dy', 'tieba']
+        platforms_sort = ['tieba', 'wb', 'bili', 'xhs', 'zhihu', 'dy']
         if 'P' in cfgs:
             platforms = cfgs['P'].split(',')
             platforms = [en2zh[p.strip()] for p in platforms if p.strip() in en2zh]
         else:
             platforms = list(crawler_cache.keys())
+        platforms.sort(key = lambda x: platforms_sort.index(x))
 
         async def generate():
             # 这里可以根据需要选择不同的平台

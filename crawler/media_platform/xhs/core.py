@@ -174,7 +174,12 @@ class XiaoHongShuCrawler(AbstractCrawler):
 
             except DataFetchError as e:
                 utils.logger.error(
-                    "[XiaoHongShuCrawler.search] Get note detail error"
+                    f"[XiaoHongShuCrawler.search] Get note detail error {e}"
+                )
+                break
+            except Exception as e:
+                utils.logger.error(
+                    f"[XiaoHongShuCrawler.search] Get error {e}"
                 )
                 break
 

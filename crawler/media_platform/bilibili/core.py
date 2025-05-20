@@ -103,38 +103,42 @@ class BilibiliCrawler(AbstractCrawler):
                     utils.logger.info(f"[BilibiliCrawler.search] Skip page: {page}")
                     page += 1
                     continue
+                try:
+                    utils.logger.info(f"[BilibiliCrawler.search] search bilibili keyword: {config.KEYWORDS}, page: {page}")
+                    video_id_list: List[str] = []
+                    videos_res = await self.bili_client.search_video_by_keyword(
+                        keyword=config.KEYWORDS,
+                        page=page,
+                        page_size=min(bili_limit_count, config.CRAWLER_MAX_NOTES_COUNT - video_cnt),
+                        order=SearchOrderType.DEFAULT,
+                        pubtime_begin_s=0,  # 作品发布日期起始时间戳
+                        pubtime_end_s=0  # 作品发布日期结束日期时间戳
+                    )
+                    video_list: List[Dict] = videos_res.get("result")
 
-                utils.logger.info(f"[BilibiliCrawler.search] search bilibili keyword: {config.KEYWORDS}, page: {page}")
-                video_id_list: List[str] = []
-                videos_res = await self.bili_client.search_video_by_keyword(
-                    keyword=config.KEYWORDS,
-                    page=page,
-                    page_size=min(bili_limit_count, config.CRAWLER_MAX_NOTES_COUNT - video_cnt),
-                    order=SearchOrderType.DEFAULT,
-                    pubtime_begin_s=0,  # 作品发布日期起始时间戳
-                    pubtime_end_s=0  # 作品发布日期结束日期时间戳
-                )
-                video_list: List[Dict] = videos_res.get("result")
+                    semaphore = asyncio.Semaphore(config.MAX_CONCURRENCY_NUM)
+                    # task_list = []
+                    # try:
+                    #     task_list = [self.get_video_info_task(aid=video_item.get("aid"), bvid="", semaphore=semaphore) for video_item in video_list]
+                    # except Exception as e:
+                    #     utils.logger.warning(f"[BilibiliCrawler.search] error in the task list. The video for this page will not be included. {e}")
+                    for item in video_list:
+                        video_item = await self.get_video_info_task(aid=item.get("aid"), bvid="", semaphore=semaphore)
+                        if video_item:
+                            video_id_list.append(video_item.get("View").get("aid"))
+                            md = await bilibili_store.update_bilibili_video(video_item)
+                            await bilibili_store.update_up_info(video_item)
+                            await self.get_bilibili_video(video_item, semaphore)
 
-                semaphore = asyncio.Semaphore(config.MAX_CONCURRENCY_NUM)
-                # task_list = []
-                # try:
-                #     task_list = [self.get_video_info_task(aid=video_item.get("aid"), bvid="", semaphore=semaphore) for video_item in video_list]
-                # except Exception as e:
-                #     utils.logger.warning(f"[BilibiliCrawler.search] error in the task list. The video for this page will not be included. {e}")
-                for item in video_list:
-                    video_item = await self.get_video_info_task(aid=item.get("aid"), bvid="", semaphore=semaphore)
-                    if video_item:
-                        video_id_list.append(video_item.get("View").get("aid"))
-                        md = await bilibili_store.update_bilibili_video(video_item)
-                        await bilibili_store.update_up_info(video_item)
-                        await self.get_bilibili_video(video_item, semaphore)
+                            yield md
+                            video_cnt += 1
+                            if video_cnt >= config.CRAWLER_MAX_NOTES_COUNT:
+                                break
+                    page += 1
+                except Exception as e:
+                    utils.logger.error(f"[BilibiliCrawler.search] Exception: {e}")
+                    break
 
-                        yield md
-                        video_cnt += 1
-                        if video_cnt >= config.CRAWLER_MAX_NOTES_COUNT:
-                            break
-                page += 1
                 # await self.batch_get_video_comments(video_id_list)
         # 按照 START_DAY 至 END_DAY 按照每一天进行筛选，这样能够突破 1000 条视频的限制，最大程度爬取该关键词下每一天的所有视频
         else:
@@ -186,7 +190,7 @@ class BilibiliCrawler(AbstractCrawler):
                         # 先不管评论
                     # go to next day
                     except Exception as e:
-                        print(e)
+                        utils.logger.error(f"[BilibiliCrawler.search] Exception: {e}")
                         break
 
     async def batch_get_video_comments(self, video_id_list: List[str]):

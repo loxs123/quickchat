@@ -110,35 +110,35 @@ class WeiboCrawler(AbstractCrawler):
                 page += 1
                 continue
             utils.logger.info(f"[WeiboCrawler.search] search weibo keyword: {config.KEYWORDS}, page: {page}")
-            # try:
-            search_res = await self.wb_client.get_note_by_keyword(
-                keyword=config.KEYWORDS,
-                page=page,
-                search_type=SearchType.DEFAULT
-            )
-            semaphore = asyncio.Semaphore(config.MAX_CONCURRENCY_NUM)
-            note_id_list: List[str] = []
-            note_list = filter_search_result_card(search_res.get("cards"))
-            for note_item in note_list:
-                if note_item:
-                    mblog: Dict = note_item.get("mblog")
-                    if mblog:
-                        note_id_list.append(mblog.get("id"))
-                        info = await self.get_note_info_task(note_id=mblog.get("id"), semaphore=semaphore)
-                        md = await weibo_store.update_weibo_note(note_item, info)
-                        await self.get_note_images(mblog)
+            try:
+                search_res = await self.wb_client.get_note_by_keyword(
+                    keyword=config.KEYWORDS,
+                    page=page,
+                    search_type=SearchType.DEFAULT
+                )
+                semaphore = asyncio.Semaphore(config.MAX_CONCURRENCY_NUM)
+                note_id_list: List[str] = []
+                note_list = filter_search_result_card(search_res.get("cards"))
+                for note_item in note_list:
+                    if note_item:
+                        mblog: Dict = note_item.get("mblog")
+                        if mblog:
+                            note_id_list.append(mblog.get("id"))
+                            info = await self.get_note_info_task(note_id=mblog.get("id"), semaphore=semaphore)
+                            md = await weibo_store.update_weibo_note(note_item, info)
+                            await self.get_note_images(mblog)
 
-                        yield md
+                            yield md
 
-                        note_cnt += 1
-                        if note_cnt >= config.CRAWLER_MAX_NOTES_COUNT:
-                            break
+                            note_cnt += 1
+                            if note_cnt >= config.CRAWLER_MAX_NOTES_COUNT:
+                                break
 
-            page += 1
-            await self.batch_get_notes_comments(note_id_list)
-            # except Exception as e:
-            #     utils.logger.info(f"[WeiboCrawler.search] Exception: {e}")
-            #     break
+                page += 1
+                await self.batch_get_notes_comments(note_id_list)
+            except Exception as e:
+                utils.logger.info(f"[WeiboCrawler.search] Exception: {e}")
+                break
 
     async def get_specified_notes(self):
         """
