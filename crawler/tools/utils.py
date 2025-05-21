@@ -18,8 +18,8 @@ from .time_util import *
 
 
 def init_loging_config():
-    level = logging.ERROR
-    # level = logging.INFO
+    # level = logging.ERROR
+    level = logging.INFO
     logging.basicConfig(
         level=level,
         format="%(asctime)s %(name)s %(levelname)s (%(filename)s:%(lineno)d) - %(message)s",
@@ -48,6 +48,8 @@ async def set_config(crawler, config, kwargs, platform):
         if key == 'C': key = 'CRAWLER_MAX_NOTES_COUNT'
         if key == 'P': continue
         key = key.replace(f'{platform}_', '')
+        if not hasattr(config, key):
+            continue
         new_kwargs[key] = value
         old_value = getattr(config, key)
         if isinstance(old_value, bool):
@@ -59,14 +61,14 @@ async def set_config(crawler, config, kwargs, platform):
             setattr(config, key, int(value))
         else:
             setattr(config, key, value)
-
+    
     if 'HEADLESS' not in new_kwargs:
         config.HEADLESS = True
     
     if 'LOGIN_TYPE' not in new_kwargs:
         config.LOGIN_TYPE = 'cookie'
 
-    if 'COOKIES' in kwargs:
+    if 'COOKIES' in new_kwargs:
         await crawler.close()
         await crawler.start()
     
