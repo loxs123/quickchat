@@ -101,6 +101,6 @@
 
 ## 体验网站
 
-http://101.200.43.46/loxs
+[loxs.asia/loxs](https://loxs.asia/loxs)
 
 > 仅供学习使用。
